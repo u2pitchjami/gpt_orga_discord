@@ -7,11 +7,9 @@ import datetime
 from dotenv import load_dotenv
 from google_agenda import get_todays_events, add_event_to_google_calendar
 
-async def main():
-    async with client:
-        await client.start(TOKEN)
 
-asyncio.run(main())
+
+
 # Chemin dynamique basé sur le script en cours
 script_dir = os.path.dirname(os.path.abspath(__file__))
 env_path = os.path.join(script_dir, ".env")
@@ -23,6 +21,11 @@ OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 DISCORD_BOT_TOKEN = os.getenv('DISCORD_BOT_TOKEN')
 DISCORD_CHANNEL_ID = os.getenv('DISCORD_CHANNEL_ID')
 OBSIDIAN_TODO_FILE = os.getenv('OBSIDIAN_TODO_FILE')
+
+
+async def main():
+    async with client:
+        await client.start(DISCORD_BOT_TOKEN)
 
 def read_tasks_from_obsidian():
     
@@ -114,24 +117,43 @@ client = discord.Client(intents=intents)
 @client.event
 async def on_ready():
     print(f"✅ Connecté en tant que {client.user}")
-    channel = client.get_channel(DISCORD_CHANNEL_ID)
-    
+    channel = await client.fetch_channel(DISCORD_CHANNEL_ID)
+    print(f"Channel: {channel}")  # Vérifie si c'est None ou un objet valide
+    print(f"Type de channel: {type(channel)}")  # Vérifie le type exact
+    print(dir(channel))  # Liste toutes les méthodes et attributs disponibles
+
+    permissions = channel.permissions_for(channel.guild.me)
+    print(f"Le bot peut envoyer des messages ? {permissions.send_messages}")
+
+    print ("2")
     if channel:
+        print ("3")
         tasks = read_tasks_from_obsidian()  # Récupère tes tâches depuis Obsidian
+        print ("4")
         agenda = get_todays_events()  # Récupère tes événements Google Agenda
-        
+        print ("5")
         briefing = get_gpt_briefing(tasks)  # Demande un briefing à GPT
-        
+        print ("6")
         full_message = f"{agenda}\n\n{briefing}"  # Combine tout
         print (full_message)
-        await channel.send(full_message)  # Envoie sur Discord
-    
+        print(f"Type de full_message: {type(full_message)}")
+        print(f"Longueur de full_message: {len(full_message) if isinstance(full_message, str) else 'N/A'}")
+        if len(full_message) > 2000:
+            print("Message trop long, découpage en plusieurs morceaux...")
+            chunks = [full_message[i:i+2000] for i in range(0, len(full_message), 2000)]
+            for i, chunk in enumerate(chunks, start=1):
+                await channel.send(f"({i}/{len(chunks)})\n{chunk}")
+        else:
+            await channel.send(full_message)
+                
     await client.close()
 
 # 🔹 Démarrer le bot proprement
 if __name__ == "__main__":
     try:
+        #asyncio.run(main())
         asyncio.run(client.start(DISCORD_BOT_TOKEN))
+        print ("1")
     except RuntimeError:  # Si un event loop est déjà en cours
         loop = asyncio.get_event_loop()
         loop.run_until_complete(client.start(DISCORD_BOT_TOKEN))

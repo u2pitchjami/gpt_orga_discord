@@ -4,6 +4,8 @@ import datetime
 import os
 import pytz
 from dotenv import load_dotenv
+import discord
+import asyncio
 
 # Chemin dynamique basé sur le script en cours
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -13,6 +15,8 @@ load_dotenv(env_path)
 # 🔹 Remplace par le chemin de ton fichier credentials.json
 CREDENTIALS_FILE = os.getenv('CREDENTIALS_FILE')
 CALENDAR = os.getenv('CALENDAR')
+DISCORD_BOT_TOKEN = os.getenv('DISCORD_BOT_TOKEN')
+DISCORD_CHANNEL_ID = os.getenv('DISCORD_CHANNEL_ID')
 
 # Définis ton fuseau horaire (ex: France = "Europe/Paris")
 LOCAL_TZ = pytz.timezone("Europe/Paris")
@@ -59,24 +63,32 @@ async def send_reminder():
     @client.event
     async def on_ready():
         print(f"✅ Connecté pour les rappels en tant que {client.user}")
-        channel = client.get_channel(DISCORD_CHANNEL_ID)
-        
+        channel = await client.fetch_channel(DISCORD_CHANNEL_ID)
+        print(f"📌 Vérification du channel : {channel}")  # DEBUG
+        # if channel:
+        #     await channel.send("🚀 Test de rappel, ça fonctionne ?")
+        # else:
+        #     print("❌ Erreur : Channel non trouvé, vérifie DISCORD_CHANNEL_ID !")
         while True:
+            print("⏳ Vérification des événements Google Agenda...")
             events = get_todays_events()
-            now = datetime.datetime.now()
-            
+            print("📌 Événements détectés :", events)
+            now = datetime.datetime.now(LOCAL_TZ)  # Mettre l'heure actuelle dans le bon fuseau
+
             for event in events:
                 start_time = event["start"].get("dateTime", event["start"].get("date"))
                 if start_time:
-                    event_time = event_time.replace(tzinfo=pytz.utc).astimezone(LOCAL_TZ)  # Convertir en heure locale
+                    event_time = datetime.datetime.fromisoformat(start_time).replace(tzinfo=pytz.utc).astimezone(LOCAL_TZ)
                     diff = (event_time - now).total_seconds()
-                    
-                    if 0 < diff <= 1800:  # Moins de 30 minutes avant
-                        await channel.send(f"⏳ **Rappel** : {event['summary']} commence dans 30 minutes !")
-            
-            time.sleep(600)  # Vérifie toutes les 10 minutes
 
-    client.run(DISCORD_BOT_TOKEN)
+                    if 0 < diff <= 1800:  # Moins de 30 minutes avant
+                        print(f"🔔 Envoi d'un rappel Discord pour {event['summary']}")
+                        await channel.send(f"⏳ **Rappel** : {event['summary']} commence dans 30 minutes !")
+
+            await asyncio.sleep(600)  # Vérifie toutes les 10 minutes
+
+
+    await client.start(DISCORD_BOT_TOKEN)  # ✅ Compatible avec async
 
 # 🔹 Fonction pour récupérer les événements du jour
 def get_todays_events():
@@ -104,4 +116,5 @@ def get_todays_events():
 
 # 🔹 Test : affiche les événements du jour
 if __name__ == "__main__":
-    print(get_todays_events())
+    asyncio.set_event_loop(asyncio.new_event_loop())  # ✅ Force un nouvel event loop
+    asyncio.run(send_reminder())
